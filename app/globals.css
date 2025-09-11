@@ -1,0 +1,29 @@
+:root { --radius: 16px; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; font-family: ui-sans-serif, system-ui; }
+button { cursor: pointer; }
+.container { max-width: 960px; margin: 0 auto; padding: 24px; }
+.card {
+  border-radius: var(--radius);
+  background: white;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-radius: 9999px;
+  border: 0;
+  font-weight: 700;
+  font-size: 16px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+}
+.btn-primary { background: black; color: white; }
+.badge {
+  display: inline-block; padding: 6px 10px; border-radius: 9999px; background: #eef2ff; color: #3730a3; font-weight: 700; font-size: 12px;
+}
+.note { font-size: 13px; color: #334155; opacity: 0.9; }
+hr { border: none; border-top: 1px solid #e5e7eb; margin: 20px 0; }
