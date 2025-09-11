@@ -1,6 +1,6 @@
 export const metadata = {
   title: 'RainbowJump • Login con World ID',
-  description: 'Miniapp de ejemplo: botón de login con World ID (OIDC).'
+  description: 'Miniapp con un botón de login usando OIDC de World ID.'
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
