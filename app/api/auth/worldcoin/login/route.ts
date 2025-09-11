@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requiredEnv, makeState, makeNonce, setTmpAuthCookie } from '@/app/api/_utils'
+import { requiredEnv, makeState, makeNonce, setTmpAuthCookie } from '../../_utils'
 
 export async function GET() {
   const clientId = requiredEnv('WORLD_ID_CLIENT_ID')
