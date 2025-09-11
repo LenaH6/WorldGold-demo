@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { clearSessionCookie } from '../_utils'
+import { clearSessionCookie } from '../../_utils'
 
 export async function GET() {
   clearSessionCookie()

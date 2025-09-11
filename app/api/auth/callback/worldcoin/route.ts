@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requiredEnv, readTmpAuthCookie, clearTmpAuthCookie, setSessionCookie } from '../../_utils'
+import { requiredEnv, readTmpAuthCookie, clearTmpAuthCookie, setSessionCookie } from '../../../_utils'
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
