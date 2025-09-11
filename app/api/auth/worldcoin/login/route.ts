@@ -1,3 +1,5 @@
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { requiredEnv, makeState, makeNonce, setTmpAuthCookie } from '../../../_utils'
 

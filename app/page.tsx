@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 import './globals.css'
 import LoginWithWorldID from './components/LoginWithWorldID'
 import Link from 'next/link'
