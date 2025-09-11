@@ -4,7 +4,7 @@ Miniapp minimal con **un solo botón** de “Entrar con World ID” que lanza la
 
 ## Requisitos
 - Node 18+
-- Cuenta en el Developer Portal de World ID
+- Cuenta en el Developer Portal de World ID (MiniKit opcional, no requerido para este login)
 - URL pública HTTPS (por ejemplo, ngrok) para pruebas en móvil
 
 ## Variables (.env.local)

@@ -1,0 +1,8 @@
+{
+  "build": {
+    "env": {
+      "NODE_VERSION": "18.20.3",
+      "NPM_VERSION": "10.8.2"
+    }
+  }
+}
