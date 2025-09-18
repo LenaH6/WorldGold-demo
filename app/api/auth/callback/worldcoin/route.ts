@@ -47,5 +47,6 @@ export async function GET(req: NextRequest) {
     email: profile.email
   })
 
-  return NextResponse.redirect(new URL('/', url.origin))
+ return NextResponse.redirect(new URL('/?auto=siwe', url.origin))
+
 }

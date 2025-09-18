@@ -6,6 +6,7 @@ import LoginWithWorldID from './components/LoginWithWorldID'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import SiweLoginButton from "@/components/siwe-login-button"; // 👈 añadido
+import AutoSiwe from "@/components/auto-siwe";
 
 type Session = { sub: string; name?: string; email?: string }
 
@@ -20,6 +21,7 @@ export default function Home() {
   const session = getSessionCookie()
   return (
     <main>
+      <AutoSiwe />
       <div className="container">
         {session ? (
           <div className="card">
