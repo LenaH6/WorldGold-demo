@@ -20,11 +20,13 @@ export default function AutoSiwe() {
     (async () => {
       try {
         setDebug("AutoSiwe: pidiendo nonce…");
-        const { nonce } = await fetch("/api/nonce").then(r => r.json());
+        const { nonce } = await fetch("/api/nonce").then((r) => r.json());
 
         setDebug("AutoSiwe: verificando MiniKit…");
         if (!MiniKit.isInstalled()) {
-          setDebug("AutoSiwe: MiniKit NO instalado (no estás en World App)");
+          setDebug("AutoSiwe: MiniKit NO instalado");
+          // limpia query para evitar loops mientras no estés en World App
+          window.history.replaceState(null, "", window.location.pathname);
           return;
         }
 
@@ -34,7 +36,7 @@ export default function AutoSiwe() {
           statement: "Inicia sesión con World App",
         });
 
-        setDebug("AutoSiwe: enviando a /api/complete-siwe…");
+        setDebug("AutoSiwe: normalizando payload…");
         const payload = {
           siwe: {
             message: res?.siwe?.message ?? res?.message,
@@ -43,6 +45,8 @@ export default function AutoSiwe() {
           username: res?.username ?? null,
           profilePictureUrl: res?.profilePictureUrl ?? null,
         };
+
+        setDebug("AutoSiwe: enviando a /api/complete-siwe…");
         const vr = await fetch("/api/complete-siwe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -54,19 +58,19 @@ export default function AutoSiwe() {
         sessionStorage.setItem("autoSiweDone", "1");
         window.history.replaceState(null, "", window.location.pathname);
 
-        // Cuando tengas el juego:
-        // window.location.assign("/juego");
+        // cuando tengas la ruta del juego, descomenta la siguiente línea:
+        // window.location.assign("/game");
       } catch (e: any) {
-        console.error(e);
+        console.error("Auto SIWE error:", e);
         setDebug("AutoSiwe: error ❌ " + (e?.message || "desconocido"));
+        // limpiar query para evitar bucles
         window.history.replaceState(null, "", window.location.pathname);
       }
     })();
   }, [params]);
 
-  // Banner de depuración visible
   return (
-    <div style={{position:"fixed",bottom:10,left:10,background:"#000",color:"#fff",padding:"6px 10px",borderRadius:8,fontSize:12,opacity:.8,zIndex:9999}}>
+    <div style={{position:"fixed",bottom:10,left:10,background:"#000",color:"#fff",padding:"6px 10px",borderRadius:8,fontSize:12,opacity:.85,zIndex:9999}}>
       {debug}
     </div>
   );

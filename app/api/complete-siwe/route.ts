@@ -6,8 +6,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // ✅ acepta payload plano o body.siwe.{message,signature}
-    const { message, signature } = body?.siwe ?? body ?? {};
+    const message = body?.siwe?.message ?? body?.message;
+    const signature = body?.siwe?.signature ?? body?.signature;
     const username = body?.username ?? null;
     const profilePictureUrl = body?.profilePictureUrl ?? null;
 
@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
       domain: process.env.SIWE_DOMAIN || "localhost",
       nonce: cookieNonce,
     });
+
     if (!result.success) {
       return new NextResponse("SIWE inválido", { status: 401 });
     }
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
     };
 
     cookies().set("siwe", "", { expires: new Date(0), path: "/" });
+
     return NextResponse.json({ ok: true, user });
   } catch (e) {
     console.error(e);
