@@ -1,10 +1,9 @@
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-
-import { NextResponse } from 'next/server'
-import { clearSessionCookie } from '../../_utils'
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 export async function GET() {
-  clearSessionCookie()
-  return NextResponse.redirect(new URL('/', process.env.APP_BASE_URL || 'http://localhost:3000'))
+  // limpiar sessiones
+  cookies().set("rj_session", "", { httpOnly: true, path: "/", maxAge: 0 });
+  cookies().set("siwe", "", { path: "/", maxAge: 0 });
+  return NextResponse.redirect(new URL("/", process.env.APP_BASE_URL || "/"));
 }
