@@ -43,7 +43,7 @@ export default function Home() {
         ) : (
           <>
             <LoginWithWorldID />
-            <SiweLoginButton /> {/* 👈 aquí aparece el botón SIWE */}
+
           </>
         )}
       </div>

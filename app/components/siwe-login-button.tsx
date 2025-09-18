@@ -13,18 +13,31 @@ export default function SiweLoginButton() {
         return;
       }
 
+      // 1) pedir nonce (guarda cookie siwe)
       const nonceRes = await fetch("/api/nonce");
       const { nonce } = await nonceRes.json();
 
-      const res = await MiniKit.commandsAsync.walletAuth({
+      // 2) pedir firma en World App (res tipado como any para evitar TS error)
+      const res: any = await MiniKit.commandsAsync.walletAuth({
         nonce,
         statement: "Inicia sesión con World App",
       });
 
+      // 3) normalizar payload SIWE
+      const payload = {
+        siwe: {
+          message: res?.siwe?.message ?? res?.message,
+          signature: res?.siwe?.signature ?? res?.signature,
+        },
+        username: res?.username ?? null,
+        profilePictureUrl: res?.profilePictureUrl ?? null,
+      };
+
+      // 4) verificar en backend
       const verifyRes = await fetch("/api/complete-siwe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(res),
+        body: JSON.stringify(payload),
       });
 
       if (!verifyRes.ok) throw new Error(await verifyRes.text());
