@@ -6,7 +6,9 @@ export async function POST(req: NextRequest) {
   try {
     // Payload que devuelve MiniKit.commandsAsync.walletAuth(...)
     const body = await req.json();
-    const { message, signature, username, profilePictureUrl } = body || {};
+    const { message, signature } = body?.siwe ?? body ?? {};
+const username = body?.username ?? null;
+const profilePictureUrl = body?.profilePictureUrl ?? null;
 
     // Validaciones básicas
     if (!message || !signature) {
