@@ -5,6 +5,7 @@ import './globals.css'
 import LoginWithWorldID from './components/LoginWithWorldID'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
+import SiweLoginButton from "@/components/siwe-login-button"; // 👈 añadido
 
 type Session = { sub: string; name?: string; email?: string }
 
@@ -23,18 +24,25 @@ export default function Home() {
         {session ? (
           <div className="card">
             <span className="badge">Sesión activa</span>
-            <h2 style={{marginTop: 10}}>Hola{session.name ? `, ${session.name}` : ''} 👋</h2>
-            <p style={{marginTop: 8}}>Autenticado con <b>World ID</b>.</p>
-            <ul style={{fontSize: 14, lineHeight: 1.6}}>
+            <h2 style={{ marginTop: 10 }}>
+              Hola{session.name ? `, ${session.name}` : ''} 👋
+            </h2>
+            <p style={{ marginTop: 8 }}>
+              Autenticado con <b>World ID</b>.
+            </p>
+            <ul style={{ fontSize: 14, lineHeight: 1.6 }}>
               <li><b>sub:</b> {session.sub}</li>
               {session.email && <li><b>email:</b> {session.email}</li>}
               {session.name && <li><b>name:</b> {session.name}</li>}
             </ul>
-            <hr/>
+            <hr />
             <Link href="/api/auth/logout">Cerrar sesión</Link>
           </div>
         ) : (
-          <LoginWithWorldID/>
+          <>
+            <LoginWithWorldID />
+            <SiweLoginButton /> {/* 👈 aquí aparece el botón SIWE */}
+          </>
         )}
       </div>
     </main>
