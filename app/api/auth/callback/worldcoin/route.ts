@@ -1,65 +1,29 @@
+// TEMPORAL: callback simple para probar redirect auto=siwe
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-const OAUTH_TOKEN_URL = "https://id.worldcoin.org/oauth/token";
-const OAUTH_USERINFO_URL = "https://id.worldcoin.org/userinfo";
-
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
+
+  // Si no hay code, manda error (igual que antes)
   if (!code) {
     return NextResponse.redirect(new URL("/?error=missing_code", originFrom(url)));
   }
 
-  const body = new URLSearchParams({
-    grant_type: "authorization_code",
-    code,
-    redirect_uri: process.env.WORLD_ID_REDIRECT_URL || "",
-    client_id: process.env.WORLD_ID_CLIENT_ID || "",
-    client_secret: process.env.WORLD_ID_CLIENT_SECRET || ""
-  });
-
-  const tokenRes = await fetch(OAUTH_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body
-  });
-
-  if (!tokenRes.ok) {
-    return NextResponse.redirect(new URL("/?error=token_exchange_failed", originFrom(url)));
-  }
-
-  const token = await tokenRes.json();
-  const accessToken = token.access_token as string | undefined;
-  if (!accessToken) {
-    return NextResponse.redirect(new URL("/?error=missing_access_token", originFrom(url)));
-  }
-
-  const profileRes = await fetch(OAUTH_USERINFO_URL, {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
-
-  if (!profileRes.ok) {
-    return NextResponse.redirect(new URL("/?error=userinfo_failed", originFrom(url)));
-  }
-
-  const profile = await profileRes.json() as { sub: string; name?: string; email?: string };
-
-  cookies().set("rj_session", JSON.stringify({
-    sub: profile.sub,
-    name: profile.name ?? null,
-    email: profile.email ?? null
-  }), {
+  // --- TEMPORAL: no intercambio de token, sólo dejamos una sesión mínima para testing ---
+  cookies().set("rj_session", JSON.stringify({ sub: "test-sub", name: "Test", email: null }), {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
     secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 7
+    maxAge: 60 * 60 // 1 h para test
   });
 
+  // redirige con auto=siwe para que AutoSiwe se dispare
   return NextResponse.redirect(new URL("/?auto=siwe", originFrom(url)));
 }
 
