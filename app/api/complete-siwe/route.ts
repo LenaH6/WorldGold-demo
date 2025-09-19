@@ -3,75 +3,120 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { SiweMessage } from "siwe";
 
+/**
+ * Extrae el primer valor no-undefined dado un objeto y una lista de paths tipo "a.b.c"
+ */
+function pickFirst(obj: any, paths: string[]) {
+  for (const p of paths) {
+    const parts = p.split(".");
+    let cur: any = obj;
+    let ok = true;
+    for (const part of parts) {
+      if (cur == null) { ok = false; break; }
+      cur = cur[part];
+    }
+    if (ok && cur !== undefined) return cur;
+  }
+  return undefined;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Log grande (para Vercel) - recortamos en console si es muy largo
-    try { console.log("complete-siwe FULL BODY:", JSON.stringify(body).slice(0, 8000)); } catch(e){ console.log("complete-siwe: unable to stringify body"); }
+    // Log corto (evitar logs gigantes)
+    try { console.log("complete-siwe FULL BODY (start):", JSON.stringify(body).slice(0, 4000)); } catch (e) { console.log("complete-siwe: unable to stringify body"); }
 
-    // 1) intento directo: rawResponse.finalPayload (observado en tus logs)
-    const finalPayload = body?.rawResponse?.finalPayload ?? null;
+    // 1) rutas observadas en MiniKit / World App (incluye finalPayload)
+    const messagePaths = [
+      "rawResponse.finalPayload.message",
+      "rawResponse.commandPayload.siweMessage",
+      "rawResponse.finalPayload.signedMessage",
+      "rawResponse.finalPayload.siweMessage",
+      "siwe.message",
+      "message",
+      "payload.siwe.message",
+      "payload.message",
+      "result.message",
+      "data.message"
+    ];
+    const signaturePaths = [
+      "rawResponse.finalPayload.signature",
+      "rawResponse.finalPayload.signedSignature",
+      "rawResponse.signature",
+      "siwe.signature",
+      "signature",
+      "payload.siwe.signature",
+      "payload.signature",
+      "result.signature",
+      "data.signature"
+    ];
 
-    let message: string | undefined = undefined;
-    let signature: string | undefined = undefined;
+    // 2) Extraer values
+    let message = pickFirst(body, messagePaths);
+    let signature = pickFirst(body, signaturePaths);
 
-    if (finalPayload) {
-      message = finalPayload.message ?? finalPayload.siweMessage ?? finalPayload.signedMessage ?? undefined;
-      signature = finalPayload.signature ?? finalPayload.signedSignature ?? finalPayload.sig ?? undefined;
-      console.log("complete-siwe: extracted from finalPayload", !!message, !!signature);
-    }
+    // 3) Log extracted presence
+    console.log("complete-siwe: extracted presence -> message:", !!message, "signature:", !!signature);
 
-    // 2) fallback a otros lugares comunes
-    if (!message) message = body?.siwe?.message ?? body?.message ?? body?.payload?.message ?? undefined;
-    if (!signature) signature = body?.siwe?.signature ?? body?.signature ?? body?.payload?.signature ?? undefined;
-
-    console.log("complete-siwe: final extracted flags -> messageExists:", !!message, "signatureExists:", !!signature);
-
+    // 4) Si no tenemos message/signature, devolver debug JSON (cliente lo mostrará)
     if (!message || !signature) {
-      // Devolvemos el body para que lo veas en cliente (debug)
       const debug = {
         error: "missing_message_or_signature_after_extract",
         messageExists: !!message,
         signatureExists: !!signature,
-        rawResponseSample: body?.rawResponse ?? null,
-        fullKeys: Object.keys(body ?? {}).slice(0, 100)
+        receivedKeysSample: {
+          siwe: body?.siwe ?? null,
+          rawResponse: body?.rawResponse ?? null,
+          fullKeys: Object.keys(body ?? {}).slice(0, 50)
+        },
       };
-      console.warn("complete-siwe debug - missing fields:", JSON.stringify(debug).slice(0,2000));
-      return new NextResponse(JSON.stringify(debug), { status: 400, headers: { "Content-Type": "application/json" } });
+      console.warn("complete-siwe debug - missing fields:", JSON.stringify(debug.receivedKeysSample).slice(0,1000));
+      return new NextResponse(JSON.stringify(debug), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
-    // Nonce cookie check
+    // 5) Nonce cookie
     const cookieNonce = cookies().get("siwe")?.value;
+    console.log("complete-siwe: cookieNonce present?", !!cookieNonce);
     if (!cookieNonce) {
-      console.warn("complete-siwe: nonce cookie not found");
-      return new NextResponse("Nonce no encontrado", { status: 400 });
+      console.warn("complete-siwe: nonce cookie no encontrada");
+      return new NextResponse(JSON.stringify({ error: "nonce_not_found" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
 
-    // Verify SIWE
-    const siwe = new SiweMessage(String(message));
-    const result = await siwe.verify({
-      signature: String(signature),
-      domain: process.env.SIWE_DOMAIN || "localhost",
-      nonce: cookieNonce,
-    });
+    // 6) Normalizar y verificar con siwe
+    try {
+      const siwe = new SiweMessage(String(message));
+      const result = await siwe.verify({
+        signature: String(signature),
+        domain: process.env.SIWE_DOMAIN || "localhost",
+        nonce: cookieNonce,
+      });
 
-    if (!result.success) {
-      console.warn("complete-siwe: verification failed", result);
-      return new NextResponse("SIWE inválido", { status: 401 });
+      console.log("complete-siwe: siwe.verify result:", result);
+
+      if (!result.success) {
+        console.warn("complete-siwe: SIWE verification failed", result);
+        return new NextResponse("SIWE inválido", { status: 401 });
+      }
+
+      const user = {
+        walletAddress: siwe.address,
+        username: body?.username ?? null,
+        profilePictureUrl: body?.profilePictureUrl ?? null,
+      };
+
+      // limpiar nonce cookie (evitar replay)
+      cookies().set("siwe", "", { expires: new Date(0), path: "/" });
+
+      return NextResponse.json({ ok: true, user });
+    } catch (verifyError: any) {
+      console.error("complete-siwe: error during siwe.verify:", verifyError);
+      return new NextResponse("Error verificando SIWE", { status: 500 });
     }
-
-    const user = {
-      walletAddress: siwe.address,
-      username: body?.username ?? null,
-      profilePictureUrl: body?.profilePictureUrl ?? null,
-    };
-
-    // limpiar nonce cookie
-    cookies().set("siwe", "", { expires: new Date(0), path: "/" });
-
-    return NextResponse.json({ ok: true, user });
-  } catch (e) {
+  } catch (e: any) {
     console.error("complete-siwe exception:", e);
     return new NextResponse("Error verificando SIWE", { status: 500 });
   }
