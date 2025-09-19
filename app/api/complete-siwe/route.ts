@@ -3,9 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { SiweMessage } from "siwe";
 
-/**
- * Extrae el primer valor no-undefined dado un objeto y una lista de paths tipo "a.b.c"
- */
+/** intenta sacar el primer valor no-undefined de varios paths tipo "a.b.c" */
 function pickFirst(obj: any, paths: string[]) {
   for (const p of paths) {
     const parts = p.split(".");
@@ -24,10 +22,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Log corto (evitar logs gigantes)
+    // Log corto para debugging (Vercel)
     try { console.log("complete-siwe FULL BODY (start):", JSON.stringify(body).slice(0, 4000)); } catch (e) { console.log("complete-siwe: unable to stringify body"); }
 
-    // 1) rutas observadas en MiniKit / World App (incluye finalPayload)
+    // Rutas observadas en tu integración / variantes
     const messagePaths = [
       "rawResponse.finalPayload.message",
       "rawResponse.commandPayload.siweMessage",
@@ -52,14 +50,12 @@ export async function POST(req: NextRequest) {
       "data.signature"
     ];
 
-    // 2) Extraer values
+    // Extraer message y signature de las rutas posibles
     let message = pickFirst(body, messagePaths);
     let signature = pickFirst(body, signaturePaths);
 
-    // 3) Log extracted presence
     console.log("complete-siwe: extracted presence -> message:", !!message, "signature:", !!signature);
 
-    // 4) Si no tenemos message/signature, devolver debug JSON (cliente lo mostrará)
     if (!message || !signature) {
       const debug = {
         error: "missing_message_or_signature_after_extract",
@@ -78,7 +74,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 5) Nonce cookie
+    // Nonce desde cookie (creada en /api/nonce)
     const cookieNonce = cookies().get("siwe")?.value;
     console.log("complete-siwe: cookieNonce present?", !!cookieNonce);
     if (!cookieNonce) {
@@ -86,9 +82,22 @@ export async function POST(req: NextRequest) {
       return new NextResponse(JSON.stringify({ error: "nonce_not_found" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
 
-    // 6) Normalizar y verificar con siwe
+    // Normalizar y verificar SIWE
     try {
-      const siwe = new SiweMessage(String(message));
+      // Normalizar saltos de línea y eliminar saltos múltiple innecesarios
+      let normalized = String(message).replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+
+      // Si por alguna razón el mensaje incluye placeholders extraños, preferimos cortar
+      const lines = normalized.split("\n");
+      // EIP-4361 typical block is around 7-8 lines; prevenimos mensajes absurdamente largos
+      if (lines.length > 12) {
+        console.warn("complete-siwe: demasiadas líneas en el mensaje, cortando de", lines.length, "a 12");
+        normalized = lines.slice(0, 12).join("\n");
+      }
+
+      console.log("complete-siwe: normalized message (start):", normalized.slice(0, 500));
+      const siwe = new SiweMessage(normalized);
+
       const result = await siwe.verify({
         signature: String(signature),
         domain: process.env.SIWE_DOMAIN || "localhost",
@@ -114,6 +123,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, user });
     } catch (verifyError: any) {
       console.error("complete-siwe: error during siwe.verify:", verifyError);
+      // enviar info mínima al cliente (mensaje genérico)
       return new NextResponse("Error verificando SIWE", { status: 500 });
     }
   } catch (e: any) {
