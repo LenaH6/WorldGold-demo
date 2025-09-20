@@ -1,36 +1,51 @@
 "use client";
 import { useEffect, useState } from "react";
+
 import { MiniKit } from "@worldcoin/minikit-js";
+import { useMiniKit } from "./minikit-provider";
 
 export default function AutoSiwe() {
   const [debug, setDebug] = useState("AutoSiwe: inicializando");
+  const { isReady, isInstalled } = useMiniKit();
 
   useEffect(() => {
-    // DEBUG: Mostrar toda la URL actual
-    const fullUrl = window.location.href;
-    console.log("🔍 FULL URL:", fullUrl);
-    
+    // No hacer nada hasta que MiniKit esté listo
+    if (!isReady) {
+      setDebug("AutoSiwe: esperando MiniKit...");
+      return;
+    }
+
     const params = new URLSearchParams(window.location.search);
     const auto = params.get("auto");
     const code = params.get("code");
     
-    // DEBUG: Mostrar todos los parámetros
-    console.log("🔍 URL PARAMS:", Array.from(params.entries()));
-    console.log("🔍 AUTO PARAM:", auto);
-    console.log("🔍 CODE PARAM:", code);
+    const currentUrl = window.location.href;
+    const lastProcessedUrl = sessionStorage.getItem("lastSiweUrl");
     
-    // Detectar si debe ejecutar SIWE automáticamente
-    const shouldRunSiwe = auto === "siwe" || (code && !sessionStorage.getItem("autoSiweDone"));
+    console.log("🔍 AutoSiwe Debug:");
+    console.log("- URL:", currentUrl);
+    console.log("- Params:", Array.from(params.entries()));
+    console.log("- MiniKit Ready:", isReady, "Installed:", isInstalled);
     
-    setDebug(`AutoSiwe: URL=${fullUrl.split('?')[1] || 'no-params'}, auto=${auto}, code=${!!code}, shouldRun=${shouldRunSiwe}`);
+    const shouldRunSiwe = auto === "siwe" || (code && true);
+    
+    setDebug(`AutoSiwe: auto=${auto}, code=${!!code}, shouldRun=${shouldRunSiwe}, miniKit=${isInstalled}`);
 
     if (!shouldRunSiwe) {
-      setDebug(`AutoSiwe: NO TRIGGER - auto=${auto}, code=${!!code}, sessionDone=${sessionStorage.getItem("autoSiweDone")}`);
+      setDebug(`AutoSiwe: NO TRIGGER - auto=${auto}, code=${!!code}`);
       return;
     }
 
-    if (sessionStorage.getItem("autoSiweDone") === "1") {
-      setDebug("AutoSiwe: ya corrido anteriormente, no repetir");
+    if (lastProcessedUrl === currentUrl) {
+      setDebug("AutoSiwe: misma URL ya procesada");
+      window.history.replaceState(null, "", window.location.pathname);
+      return;
+    }
+
+    if (!isInstalled) {
+      setDebug("❌ AutoSiwe: MiniKit no disponible - ¿estás en World App?");
+      console.error("❌ MiniKit not installed. Cannot proceed with SIWE.");
+      // Limpiar URL pero no continuar
       window.history.replaceState(null, "", window.location.pathname);
       return;
     }
@@ -43,30 +58,18 @@ export default function AutoSiwe() {
         const nonceRes = await fetch("/api/nonce");
         if (!nonceRes.ok) throw new Error("nonce fetch failed");
         const { nonce } = await nonceRes.json();
+        console.log("✅ Nonce:", nonce);
 
-        setDebug("AutoSiwe: esperando MiniKit (0-3s)...");
-        const waitForMiniKit = async (tries = 6) => {
-          for (let i = 0; i < tries && !cancelled; i++) {
-            if (MiniKit.isInstalled()) return true;
-            await new Promise((r) => setTimeout(r, 500));
-          }
-          return MiniKit.isInstalled();
-        };
-        const installed = await waitForMiniKit();
-        if (!installed) {
-          setDebug("AutoSiwe: MiniKit NO instalado (no estás en World App)");
-          window.history.replaceState(null, "", window.location.pathname);
-          return;
-        }
-
-        setDebug("AutoSiwe: walletAuth() -> esperando respuesta...");
+        setDebug("🚀 AutoSiwe: Ejecutando walletAuth (pantalla SIWE debería aparecer)...");
+        console.log("🚀 Calling MiniKit.commandsAsync.walletAuth...");
+        
         const res: any = await MiniKit.commandsAsync.walletAuth({
           nonce,
-          statement: "Inicia sesión con World App",
+          statement: "Inicia sesión con World App para acceder a tu progreso",
         });
 
-        console.log("AutoSiwe - walletAuth response (raw):", res);
-        setDebug("AutoSiwe: recibida respuesta, mirando estructura...");
+        console.log("✅ walletAuth response:", res);
+        setDebug("✅ AutoSiwe: Respuesta recibida, procesando...");
 
         const payload = {
           siwe: {
@@ -78,8 +81,8 @@ export default function AutoSiwe() {
           rawResponse: res ?? null
         };
 
-        console.log("AutoSiwe - payload enviado a /api/complete-siwe:", payload);
-        setDebug("AutoSiwe: enviando payload a backend...");
+        console.log("📤 Payload to backend:", payload);
+        setDebug("📤 AutoSiwe: enviando a complete-siwe...");
 
         const vr = await fetch("/api/complete-siwe", {
           method: "POST",
@@ -89,26 +92,36 @@ export default function AutoSiwe() {
 
         if (!vr.ok) {
           const text = await vr.text();
+          console.error("❌ complete-siwe failed:", text);
           throw new Error("complete-siwe failed: " + text);
         }
 
-        setDebug("AutoSiwe: SIWE OK ✅ limpiando query");
-        sessionStorage.setItem("autoSiweDone", "1");
+        const result = await vr.json();
+        console.log("✅ Backend success:", result);
+
+        setDebug("✅ AutoSiwe: ¡Autenticación exitosa!");
+        sessionStorage.setItem("lastSiweUrl", currentUrl);
         window.history.replaceState(null, "", window.location.pathname);
         
-        window.location.reload();
+        // Esperar un poco para que el usuario vea el mensaje de éxito
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
         
       } catch (err: any) {
-        console.error("AutoSiwe error:", err);
-        setDebug("AutoSiwe: error ❌ " + (err?.message || "desconocido"));
-        window.history.replaceState(null, "", window.location.pathname);
+        console.error("❌ AutoSiwe error:", err);
+        setDebug("❌ Error: " + (err?.message || "desconocido"));
+        // Limpiar URL en caso de error
+        setTimeout(() => {
+          window.history.replaceState(null, "", window.location.pathname);
+        }, 3000);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isReady, isInstalled]); // Dependencias importantes
 
   return (
     <div style={{
@@ -117,13 +130,14 @@ export default function AutoSiwe() {
       left:10,
       background:"#000",
       color:"#fff",
-      padding:"6px 10px",
+      padding:"8px 12px",
       borderRadius:8,
-      fontSize:12,
-      opacity:.9,
+      fontSize:11,
+      opacity:.95,
       zIndex:9999,
-      maxWidth: "400px",
-      wordWrap: "break-word"
+      maxWidth: "90vw",
+      wordWrap: "break-word",
+      lineHeight: 1.4
     }}>
       {debug}
     </div>
