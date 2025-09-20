@@ -1,123 +1,133 @@
 // app/api/clear-session/route.ts
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
 export async function GET() {
   console.log("🧹 Iniciando limpieza completa de sesión...");
   
-  // Limpia cookies server-side
+  // Crear response con headers para limpiar cookies
+  const response = new NextResponse(
+    `<!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Cerrando sesión...</title>
+      </head>
+      <body style="font-family:system-ui;padding:40px;text-align:center;background:#f8fafc;">
+        <div style="max-width:400px;margin:0 auto;background:white;padding:30px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+          <div style="font-size:24px;margin-bottom:16px;">🚪</div>
+          <h2 style="margin:0 0 12px 0;color:#1f2937;">Cerrando sesión</h2>
+          <p style="color:#6b7280;margin:0 0 20px 0;">Limpiando datos y redirigiendo...</p>
+          <div id="progress" style="background:#e5e7eb;height:4px;border-radius:2px;overflow:hidden;">
+            <div id="bar" style="background:#3b82f6;height:100%;width:0%;transition:width 0.3s;"></div>
+          </div>
+        </div>
+        
+        <script>
+          console.log("🧹 Ejecutando limpieza completa del cliente...");
+          
+          // 1. Limpiar sessionStorage completamente
+          try {
+            console.log("🗑️ Limpiando sessionStorage...");
+            sessionStorage.removeItem('autoSiweDone');
+            sessionStorage.clear();
+            console.log("✅ sessionStorage limpiado");
+          } catch(e) {
+            console.error("❌ Error limpiando sessionStorage:", e);
+          }
+          
+          // 2. Limpiar localStorage por si acaso
+          try {
+            console.log("🗑️ Limpiando localStorage...");
+            localStorage.clear();
+            console.log("✅ localStorage limpiado");
+          } catch(e) {
+            console.error("❌ Error limpiando localStorage:", e);
+          }
+          
+          // 3. Limpiar todas las cookies del cliente
+          try {
+            console.log("🗑️ Limpiando cookies del cliente...");
+            document.cookie.split(";").forEach(function(cookie) {
+              var eqPos = cookie.indexOf("=");
+              var name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+              if (name) {
+                // Limpiar en múltiples paths y dominios
+                document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+                document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=" + window.location.hostname;
+                document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=." + window.location.hostname;
+              }
+            });
+            console.log("✅ Cookies del cliente limpiadas");
+          } catch(e) {
+            console.error("❌ Error limpiando cookies del cliente:", e);
+          }
+          
+          // 4. Animación de progreso
+          let progress = 0;
+          const progressBar = document.getElementById('bar');
+          const interval = setInterval(() => {
+            progress += 25;
+            if (progressBar) progressBar.style.width = progress + '%';
+            if (progress >= 100) {
+              clearInterval(interval);
+              // 5. Redirigir después de limpiar todo
+              console.log("🔄 Redirigiendo al home...");
+              setTimeout(() => {
+                window.location.replace("/");
+              }, 500);
+            }
+          }, 200);
+          
+          // 6. Fallback por si algo falla
+          setTimeout(() => {
+            console.log("⏰ Timeout: forzando redirección");
+            window.location.replace("/");
+          }, 3000);
+        </script>
+      </body>
+    </html>`,
+    {
+      status: 200,
+      headers: { 
+        "Content-Type": "text/html",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+      }
+    }
+  );
+
+  // Limpiar cookies usando response headers (más compatible)
   try {
-    const cookieStore = cookies();
-    
     // Limpiar cookie de sesión
-    cookieStore.set("rj_session", "", { 
-      httpOnly: true, 
-      path: "/", 
+    response.cookies.set("rj_session", "", {
+      httpOnly: true,
+      path: "/",
       maxAge: 0,
-      expires: new Date(0)
+      expires: new Date(0),
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production'
     });
     
     // Limpiar cookie de SIWE
-    cookieStore.set("siwe", "", { 
-      path: "/", 
+    response.cookies.set("siwe", "", {
+      httpOnly: true,
+      path: "/",
       maxAge: 0,
-      expires: new Date(0)
+      expires: new Date(0),
+      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production'
     });
     
-    console.log("✅ Cookies del servidor limpiadas");
+    console.log("✅ Cookies limpiadas via response headers");
   } catch (e) {
-    console.error("⚠️ Error limpiando cookies del servidor:", e);
+    console.error("⚠️ Error limpiando cookies:", e);
   }
 
-  // Devuelve HTML que limpia COMPLETAMENTE el cliente y redirige
-  const html = `<!doctype html>
-  <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width,initial-scale=1">
-      <title>Cerrando sesión...</title>
-    </head>
-    <body style="font-family:system-ui;padding:40px;text-align:center;background:#f8fafc;">
-      <div style="max-width:400px;margin:0 auto;background:white;padding:30px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-        <div style="font-size:24px;margin-bottom:16px;">🚪</div>
-        <h2 style="margin:0 0 12px 0;color:#1f2937;">Cerrando sesión</h2>
-        <p style="color:#6b7280;margin:0 0 20px 0;">Limpiando datos y redirigiendo...</p>
-        <div id="progress" style="background:#e5e7eb;height:4px;border-radius:2px;overflow:hidden;">
-          <div id="bar" style="background:#3b82f6;height:100%;width:0%;transition:width 0.3s;"></div>
-        </div>
-      </div>
-      
-      <script>
-        console.log("🧹 Ejecutando limpieza completa del cliente...");
-        
-        // 1. Limpiar sessionStorage completamente
-        try {
-          console.log("🗑️ Limpiando sessionStorage...");
-          sessionStorage.removeItem('autoSiweDone');
-          sessionStorage.clear();
-          console.log("✅ sessionStorage limpiado");
-        } catch(e) {
-          console.error("❌ Error limpiando sessionStorage:", e);
-        }
-        
-        // 2. Limpiar localStorage por si acaso
-        try {
-          console.log("🗑️ Limpiando localStorage...");
-          localStorage.clear();
-          console.log("✅ localStorage limpiado");
-        } catch(e) {
-          console.error("❌ Error limpiando localStorage:", e);
-        }
-        
-        // 3. Limpiar todas las cookies del cliente
-        try {
-          console.log("🗑️ Limpiando cookies del cliente...");
-          document.cookie.split(";").forEach(function(cookie) {
-            var eqPos = cookie.indexOf("=");
-            var name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
-            if (name) {
-              // Limpiar en múltiples paths y dominios
-              document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-              document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=" + window.location.hostname;
-              document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=." + window.location.hostname;
-            }
-          });
-          console.log("✅ Cookies del cliente limpiadas");
-        } catch(e) {
-          console.error("❌ Error limpiando cookies del cliente:", e);
-        }
-        
-        // 4. Animación de progreso
-        let progress = 0;
-        const progressBar = document.getElementById('bar');
-        const interval = setInterval(() => {
-          progress += 25;
-          progressBar.style.width = progress + '%';
-          if (progress >= 100) {
-            clearInterval(interval);
-            // 5. Redirigir después de limpiar todo
-            console.log("🔄 Redirigiendo al home...");
-            setTimeout(() => {
-              window.location.replace("/");
-            }, 500);
-          }
-        }, 200);
-        
-        // 6. Fallback por si algo falla
-        setTimeout(() => {
-          console.log("⏰ Timeout: forzando redirección");
-          window.location.replace("/");
-        }, 3000);
-      </script>
-    </body>
-  </html>`;
-
-  return new NextResponse(html, {
-    headers: { 
-      "Content-Type": "text/html",
-      "Cache-Control": "no-cache, no-store, must-revalidate",
-      "Pragma": "no-cache",
-      "Expires": "0"
-    }
-  });
+  return response;
 }
