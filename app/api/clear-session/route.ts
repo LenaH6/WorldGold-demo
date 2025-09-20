@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 // app/api/clear-session/route.ts - versión mejorada
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
