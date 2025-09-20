@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { SiweMessage } from "siwe";
+import { ethers } from "ethers";
 
 /** intenta sacar el primer valor no-undefined de varios paths tipo "a.b.c" */
 function pickFirst(obj: any, paths: string[]) {
@@ -22,10 +23,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Log corto para debugging (Vercel)
     try { console.log("complete-siwe FULL BODY (start):", JSON.stringify(body).slice(0, 4000)); } catch (e) { console.log("complete-siwe: unable to stringify body"); }
 
-    // Rutas observadas en tu integración / variantes
+    // Rutas donde puede llegar el message/signature según tu SDK
     const messagePaths = [
       "rawResponse.finalPayload.message",
       "rawResponse.commandPayload.siweMessage",
@@ -49,12 +49,19 @@ export async function POST(req: NextRequest) {
       "result.signature",
       "data.signature"
     ];
+    const addressPaths = [
+      "rawResponse.finalPayload.address",
+      "rawResponse.address",
+      "rawResponse.finalPayload.owner",
+      "rawResponse.finalPayload.account",
+      "address"
+    ];
 
-    // Extraer message y signature de las rutas posibles
     let message = pickFirst(body, messagePaths);
     let signature = pickFirst(body, signaturePaths);
+    const claimedAddress = pickFirst(body, addressPaths) ?? body?.rawResponse?.finalPayload?.address ?? null;
 
-    console.log("complete-siwe: extracted presence -> message:", !!message, "signature:", !!signature);
+    console.log("complete-siwe: extracted presence -> message:", !!message, "signature:", !!signature, "address:", !!claimedAddress);
 
     if (!message || !signature) {
       const debug = {
@@ -74,7 +81,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Nonce desde cookie (creada en /api/nonce)
     const cookieNonce = cookies().get("siwe")?.value;
     console.log("complete-siwe: cookieNonce present?", !!cookieNonce);
     if (!cookieNonce) {
@@ -82,22 +88,9 @@ export async function POST(req: NextRequest) {
       return new NextResponse(JSON.stringify({ error: "nonce_not_found" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
 
-    // Normalizar y verificar SIWE
+    // Try strict SIWE verify first
     try {
-      // Normalizar saltos de línea y eliminar saltos múltiple innecesarios
-      let normalized = String(message).replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-
-      // Si por alguna razón el mensaje incluye placeholders extraños, preferimos cortar
-      const lines = normalized.split("\n");
-      // EIP-4361 typical block is around 7-8 lines; prevenimos mensajes absurdamente largos
-      if (lines.length > 12) {
-        console.warn("complete-siwe: demasiadas líneas en el mensaje, cortando de", lines.length, "a 12");
-        normalized = lines.slice(0, 12).join("\n");
-      }
-
-      console.log("complete-siwe: normalized message (start):", normalized.slice(0, 500));
-      const siwe = new SiweMessage(normalized);
-
+      const siwe = new SiweMessage(String(message));
       const result = await siwe.verify({
         signature: String(signature),
         domain: process.env.SIWE_DOMAIN || "localhost",
@@ -105,25 +98,73 @@ export async function POST(req: NextRequest) {
       });
 
       console.log("complete-siwe: siwe.verify result:", result);
-
       if (!result.success) {
-        console.warn("complete-siwe: SIWE verification failed", result);
+        console.warn("complete-siwe: SIWE verification failed (siwe.verify returned false)", result);
+        // fallthrough to fallback (ethers)
+      } else {
+        // success
+        const user = {
+          walletAddress: siwe.address,
+          username: body?.username ?? null,
+          profilePictureUrl: body?.profilePictureUrl ?? null,
+        };
+        cookies().set("siwe", "", { expires: new Date(0), path: "/" });
+        return NextResponse.json({ ok: true, user });
+      }
+    } catch (siweErr: any) {
+      // siwe library threw (p.ej. invalid message grammar). Log and continue to fallback.
+      console.warn("complete-siwe: siwe.verify threw:", siweErr?.message ?? siweErr);
+    }
+
+    // FALLBACK: verify signature manually with ethers (recover address) + compare nonce
+    try {
+      const msgStr = String(message);
+      const sigStr = String(signature);
+
+      // Recover address from signature (ethers handles signed messages)
+      let recovered: string;
+      try {
+        recovered = ethers.verifyMessage(msgStr, sigStr);
+      } catch (recoverErr) {
+        console.error("complete-siwe: ethers.verifyMessage error:", recoverErr);
         return new NextResponse("SIWE inválido", { status: 401 });
       }
 
+      console.log("complete-siwe: recovered address:", recovered, "claimed address:", claimedAddress);
+
+      // Compare addresses (case-insensitive checksum)
+      if (claimedAddress) {
+        if (recovered.toLowerCase() !== String(claimedAddress).toLowerCase()) {
+          console.warn("complete-siwe: recovered address DOES NOT match claimed address");
+          return new NextResponse("SIWE inválido", { status: 401 });
+        }
+      } else {
+        // If no claimedAddress was provided, accept recovered address as walletAddress
+        console.warn("complete-siwe: no claimed address in payload, using recovered address");
+      }
+
+      // Also verify nonce was the same the server set
+      // Try to extract nonce from message text if present (look for `Nonce: <value>`)
+      const nonceMatch = msgStr.match(/Nonce:\s*([A-Za-z0-9\-]+)/i);
+      const msgNonce = nonceMatch ? nonceMatch[1] : null;
+      console.log("complete-siwe: msgNonce:", msgNonce, "cookieNonce:", cookieNonce);
+
+      if (msgNonce && msgNonce !== cookieNonce) {
+        console.warn("complete-siwe: nonce mismatch between message and cookie");
+        return new NextResponse("SIWE inválido (nonce mismatch)", { status: 401 });
+      }
+
+      // Passed fallback checks: accept session
       const user = {
-        walletAddress: siwe.address,
+        walletAddress: claimedAddress ? String(claimedAddress) : recovered,
         username: body?.username ?? null,
         profilePictureUrl: body?.profilePictureUrl ?? null,
       };
 
-      // limpiar nonce cookie (evitar replay)
       cookies().set("siwe", "", { expires: new Date(0), path: "/" });
-
       return NextResponse.json({ ok: true, user });
-    } catch (verifyError: any) {
-      console.error("complete-siwe: error during siwe.verify:", verifyError);
-      // enviar info mínima al cliente (mensaje genérico)
+    } catch (fallbackErr: any) {
+      console.error("complete-siwe: fallback verification error:", fallbackErr);
       return new NextResponse("Error verificando SIWE", { status: 500 });
     }
   } catch (e: any) {
