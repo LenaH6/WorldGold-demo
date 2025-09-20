@@ -17,7 +17,6 @@ export default function AutoSiwe() {
       return;
     }
 
-    // Evitar loops inmediatos
     const executingKey = "siwe_executing_now";
     if (sessionStorage.getItem(executingKey)) {
       setDebug("AutoSiwe: ya ejecutándose...");
@@ -28,97 +27,42 @@ export default function AutoSiwe() {
       try {
         sessionStorage.setItem(executingKey, "1");
         
-        // ===== DIAGNÓSTICO COMPLETO DE MINIKIT =====
-        setDebug("🔍 AutoSiwe: DIAGNOSTICANDO MiniKit...");
-        console.log("===== MINIKIT DIAGNOSTIC =====");
-        console.log("1. MiniKit object:", MiniKit);
-        console.log("2. MiniKit.isInstalled:", typeof MiniKit.isInstalled);
-        console.log("3. MiniKit.commandsAsync:", MiniKit.commandsAsync);
-        console.log("4. MiniKit.commandsAsync.walletAuth:", MiniKit.commandsAsync?.walletAuth);
-        console.log("5. Navigator userAgent:", navigator.userAgent);
-        console.log("6. Window location:", window.location.href);
-        console.log("7. Document title:", document.title);
-        
-        // Verificar si estamos en World App
-        const userAgent = navigator.userAgent;
-        const isWorldApp = userAgent.includes('WorldApp') || userAgent.includes('World') || userAgent.includes('Worldcoin');
-        console.log("8. Detected as World App:", isWorldApp);
-        console.log("9. Full User Agent:", userAgent);
-        
-        // Verificar objetos globales que podría usar World App
-        console.log("10. window.Telegram:", (window as any).Telegram);
-        console.log("11. window.WorldApp:", (window as any).WorldApp);
-        console.log("12. window.minikit:", (window as any).minikit);
-        console.log("13. window.__minikit:", (window as any).__minikit);
-        
-        setDebug("🔍 AutoSiwe: Esperando MiniKit disponibilidad...");
-        
-        // Esperar más tiempo y con más verificaciones
-        let installed = false;
-        for (let i = 0; i < 15; i++) {
-          try {
-            installed = MiniKit.isInstalled();
-            console.log(`Attempt ${i + 1}/15: MiniKit.isInstalled() = ${installed}`);
-            
-            if (installed) {
-              console.log("✅ MiniKit detected as installed");
-              break;
-            }
-            
-            await new Promise(r => setTimeout(r, 1000)); // Esperar más tiempo
-          } catch (e) {
-            console.error(`Error checking MiniKit on attempt ${i + 1}:`, e);
-          }
-        }
-
-        if (!installed) {
-          setDebug("❌ AutoSiwe: MiniKit NO disponible después de 15s");
-          console.error("❌ MiniKit still not available. Environment details:");
-          console.error("- User Agent:", navigator.userAgent);
-          console.error("- URL:", window.location.href);
-          console.error("- Are you in World App?");
-          
-          sessionStorage.removeItem(executingKey);
-          return;
-        }
-
-        // Obtener nonce
         setDebug("AutoSiwe: pidiendo nonce…");
         const nonceRes = await fetch("/api/nonce");
         if (!nonceRes.ok) throw new Error("nonce fetch failed");
         const { nonce } = await nonceRes.json();
-        console.log("✅ Nonce obtenido:", nonce);
 
-        // ===== INTENTAR WALLETAUTH CON DIAGNÓSTICO =====
-        setDebug("🚀 AutoSiwe: EJECUTANDO walletAuth...");
-        console.log("🚀 CALLING MiniKit.commandsAsync.walletAuth");
-        console.log("Parameters:", {
-          nonce,
-          statement: "Inicia sesión con World App para acceder a tu progreso"
-        });
-
-        // Verificar que walletAuth existe antes de llamarlo
-        if (!MiniKit.commandsAsync || !MiniKit.commandsAsync.walletAuth) {
-          throw new Error("MiniKit.commandsAsync.walletAuth no está disponible");
+        setDebug("AutoSiwe: esperando MiniKit...");
+        let installed = false;
+        for (let i = 0; i < 10; i++) {
+          installed = MiniKit.isInstalled();
+          if (installed) break;
+          await new Promise(r => setTimeout(r, 500));
         }
 
-        console.log("🎯 ABOUT TO SHOW SIWE INTERFACE...");
-        setDebug("🎯 AutoSiwe: Mostrando interfaz SIWE...");
+        if (!installed) {
+          setDebug("❌ AutoSiwe: MiniKit NO disponible");
+          sessionStorage.removeItem(executingKey);
+          return;
+        }
 
+        // ✅ AGREGAR DELAY ANTES DE WALLETAUTH
+        setDebug("⏳ AutoSiwe: Preparando interfaz SIWE... (3 segundos)");
+        await new Promise(r => setTimeout(r, 3000));
+
+        setDebug("🚀 AutoSiwe: MOSTRANDO INTERFAZ SIWE AHORA...");
+        console.log("🚀 CALLING walletAuth - SIWE INTERFACE SHOULD APPEAR");
+        
         const res: any = await MiniKit.commandsAsync.walletAuth({
           nonce,
           statement: "Inicia sesión con World App para acceder a tu progreso",
         });
 
-        console.log("✅ walletAuth COMPLETADO. Response:", res);
-        console.log("Response type:", typeof res);
-        console.log("Response keys:", res ? Object.keys(res) : 'null response');
+        console.log("✅ walletAuth completed:", res);
+        setDebug("✅ AutoSiwe: ¡SIWE completado! Verificando firma...");
 
-        if (!res) {
-          throw new Error("walletAuth returned null/undefined");
-        }
-
-        setDebug("✅ AutoSiwe: Usuario completó SIWE! Procesando...");
+        // ✅ DELAY DESPUÉS PARA QUE VEAS QUE SE COMPLETÓ
+        await new Promise(r => setTimeout(r, 2000));
 
         const payload = {
           siwe: {
@@ -130,8 +74,7 @@ export default function AutoSiwe() {
           rawResponse: res ?? null
         };
 
-        console.log("📤 Sending to backend:", payload);
-        setDebug("📤 AutoSiwe: enviando a backend...");
+        setDebug("📤 AutoSiwe: enviando para verificar...");
 
         const vr = await fetch("/api/complete-siwe", {
           method: "POST",
@@ -144,26 +87,23 @@ export default function AutoSiwe() {
           throw new Error("complete-siwe failed: " + text);
         }
 
-        console.log("✅ Backend verification successful");
-        setDebug("✅ AutoSiwe: Verificación exitosa!");
+        setDebug("✅ AutoSiwe: Verificación exitosa - sesión creada!");
         
         sessionStorage.removeItem(executingKey);
         window.history.replaceState(null, "", window.location.pathname);
         
+        // Delay antes de reload para que veas el mensaje
         setTimeout(() => {
           window.location.reload();
-        }, 1500);
+        }, 2000);
         
       } catch (err: any) {
-        console.error("❌ AutoSiwe FULL ERROR:", err);
-        console.error("Error stack:", err.stack);
-        setDebug("❌ AutoSiwe ERROR: " + (err?.message || "desconocido"));
-        
+        console.error("❌ AutoSiwe error:", err);
+        setDebug("❌ Error: " + (err?.message || "desconocido"));
         sessionStorage.removeItem(executingKey);
-        
         setTimeout(() => {
           window.history.replaceState(null, "", window.location.pathname);
-        }, 5000);
+        }, 3000);
       }
     })();
   }, []);
@@ -175,15 +115,15 @@ export default function AutoSiwe() {
       left:10,
       background:"#000",
       color:"#fff",
-      padding:"8px 12px",
+      padding:"10px 15px",
       borderRadius:8,
-      fontSize:10,
+      fontSize:12,
       opacity:.95,
       zIndex:9999,
-      maxWidth: "95vw",
+      maxWidth: "90vw",
       wordWrap: "break-word",
-      lineHeight: 1.3,
-      fontFamily: "monospace"
+      lineHeight: 1.4,
+      fontFamily: "system-ui"
     }}>
       {debug}
     </div>
