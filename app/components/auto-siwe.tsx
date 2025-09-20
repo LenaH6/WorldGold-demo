@@ -46,23 +46,34 @@ export default function AutoSiwe() {
           return;
         }
 
-        // ✅ AGREGAR DELAY ANTES DE WALLETAUTH
-        setDebug("⏳ AutoSiwe: Preparando interfaz SIWE... (3 segundos)");
-        await new Promise(r => setTimeout(r, 3000));
+        setDebug("⏳ AutoSiwe: Preparando SIWE...");
+        await new Promise(r => setTimeout(r, 2000));
 
-        setDebug("🚀 AutoSiwe: MOSTRANDO INTERFAZ SIWE AHORA...");
-        console.log("🚀 CALLING walletAuth - SIWE INTERFACE SHOULD APPEAR");
-        
+        // ✅ USAR SOLO PARÁMETROS BÁSICOS QUE ACEPTA walletAuth
+        console.log("🚀 Calling walletAuth with basic params");
+        setDebug("🚀 AutoSiwe: Ejecutando walletAuth (debería mostrar UI)...");
+
         const res: any = await MiniKit.commandsAsync.walletAuth({
-          nonce,
-          statement: "Inicia sesión con World App para acceder a tu progreso",
+          nonce: nonce,
+          statement: "Inicia sesión con World App para acceder a tu progreso"
+          // ✅ REMOVIDO: requestId, expirationTime, notBefore, resources
+          // Esos parámetros causaban el error TypeScript
         });
 
-        console.log("✅ walletAuth completed:", res);
-        setDebug("✅ AutoSiwe: ¡SIWE completado! Verificando firma...");
+        if (!res) {
+          throw new Error("walletAuth returned null - UI no apareció");
+        }
 
-        // ✅ DELAY DESPUÉS PARA QUE VEAS QUE SE COMPLETÓ
-        await new Promise(r => setTimeout(r, 2000));
+        console.log("✅ walletAuth response:", res);
+        setDebug("✅ AutoSiwe: Usuario completó SIWE, verificando...");
+
+        // Verificar que hay datos de firma
+        const hasSignature = res?.signature || res?.siwe?.signature;
+        const hasMessage = res?.message || res?.siwe?.message;
+        
+        if (!hasSignature || !hasMessage) {
+          throw new Error("Falta signature o message - UI podría no haber aparecido");
+        }
 
         const payload = {
           siwe: {
@@ -74,6 +85,7 @@ export default function AutoSiwe() {
           rawResponse: res ?? null
         };
 
+        console.log("📤 Payload:", payload);
         setDebug("📤 AutoSiwe: enviando para verificar...");
 
         const vr = await fetch("/api/complete-siwe", {
@@ -87,12 +99,11 @@ export default function AutoSiwe() {
           throw new Error("complete-siwe failed: " + text);
         }
 
-        setDebug("✅ AutoSiwe: Verificación exitosa - sesión creada!");
+        setDebug("✅ AutoSiwe: Verificación exitosa - creando sesión!");
         
         sessionStorage.removeItem(executingKey);
         window.history.replaceState(null, "", window.location.pathname);
         
-        // Delay antes de reload para que veas el mensaje
         setTimeout(() => {
           window.location.reload();
         }, 2000);
@@ -122,8 +133,7 @@ export default function AutoSiwe() {
       zIndex:9999,
       maxWidth: "90vw",
       wordWrap: "break-word",
-      lineHeight: 1.4,
-      fontFamily: "system-ui"
+      lineHeight: 1.4
     }}>
       {debug}
     </div>
