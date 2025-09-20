@@ -1,85 +1,49 @@
 "use client";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-
-// Mock MiniKit para el artefacto - en tu proyecto real usarás la importación real
+import { useEffect, type ReactNode } from "react";
 import { MiniKit } from "@worldcoin/minikit-js";
 
-// Context para compartir estado de MiniKit
-const MiniKitContext = createContext<{
-  isReady: boolean;
-  isInstalled: boolean;
-}>({ isReady: false, isInstalled: false });
-
-export const useMiniKit = () => useContext(MiniKitContext);
-
 export default function MiniKitProvider({ children }: { children: ReactNode }) {
-  const [isReady, setIsReady] = useState(false);
-  const [isInstalled, setIsInstalled] = useState(false);
-
   useEffect(() => {
-    let attempts = 0;
-    const maxAttempts = 10;
+    console.log("🔧 MiniKitProvider: Initializing...");
     
     const initMiniKit = async () => {
-      console.log("🔧 Initializing MiniKit...");
-      
-      // Instalar MiniKit
       try {
+        console.log("🔧 Calling MiniKit.install()...");
         MiniKit.install();
-        console.log("✅ MiniKit.install() called");
-      } catch (e) {
-        console.warn("⚠️ MiniKit.install() error:", e);
+        console.log("✅ MiniKit.install() completed");
+        
+        // Verificar instalación inmediatamente y después
+        const checkAndLog = () => {
+          const installed = MiniKit.isInstalled();
+          console.log("🔍 MiniKit.isInstalled():", installed);
+          console.log("🔍 MiniKit object:", MiniKit);
+          console.log("🔍 commandsAsync available:", !!MiniKit.commandsAsync);
+          console.log("🔍 walletAuth available:", !!MiniKit.commandsAsync?.walletAuth);
+          console.log("🔍 User Agent:", navigator.userAgent);
+          console.log("🔍 World App detection:", 
+            navigator.userAgent.includes('WorldApp') || 
+            navigator.userAgent.includes('World') || 
+            navigator.userAgent.includes('Worldcoin')
+          );
+        };
+        
+        checkAndLog(); // Inmediatamente
+        
+        // Verificar cada segundo durante 10 segundos
+        for (let i = 1; i <= 10; i++) {
+          setTimeout(() => {
+            console.log(`🔍 MiniKit check ${i}/10:`);
+            checkAndLog();
+          }, i * 1000);
+        }
+        
+      } catch (error) {
+        console.error("❌ MiniKitProvider error:", error);
       }
-      
-      // Esperar a que esté disponible
-      const checkInstallation = () => {
-        attempts++;
-        const installed = MiniKit.isInstalled();
-        console.log(`🔍 MiniKit check ${attempts}/${maxAttempts}: installed=${installed}`);
-        
-        if (installed) {
-          setIsInstalled(true);
-          setIsReady(true);
-          console.log("✅ MiniKit ready and installed");
-          return;
-        }
-        
-        if (attempts < maxAttempts) {
-          setTimeout(checkInstallation, 500);
-        } else {
-          console.log("⚠️ MiniKit not detected after max attempts");
-          setIsReady(true); // Marcar como ready aunque no esté instalado
-          setIsInstalled(false);
-        }
-      };
-      
-      // Empezar a verificar inmediatamente
-      checkInstallation();
     };
     
     initMiniKit();
   }, []);
 
-  const value = { isReady, isInstalled };
-
-  return (
-    <MiniKitContext.Provider value={value}>
-      {children}
-      {/* Debug visual */}
-      <div style={{
-        position: 'fixed',
-        top: 10,
-        right: 10,
-        background: isInstalled ? '#22c55e' : '#ef4444',
-        color: 'white',
-        padding: '4px 8px',
-        borderRadius: 4,
-        fontSize: 10,
-        zIndex: 9998,
-        opacity: 0.8
-      }}>
-        MiniKit: {isReady ? (isInstalled ? '✅ Ready' : '❌ Not Available') : '⏳ Loading'}
-      </div>
-    </MiniKitContext.Provider>
-  );
+  return <>{children}</>;
 }
