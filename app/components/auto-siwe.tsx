@@ -6,17 +6,26 @@ export default function AutoSiwe() {
   const [debug, setDebug] = useState("AutoSiwe: inicializando");
 
   useEffect(() => {
+    // DEBUG: Mostrar toda la URL actual
+    const fullUrl = window.location.href;
+    console.log("🔍 FULL URL:", fullUrl);
+    
     const params = new URLSearchParams(window.location.search);
     const auto = params.get("auto");
-    const code = params.get("code"); // OIDC callback code
+    const code = params.get("code");
+    
+    // DEBUG: Mostrar todos los parámetros
+    console.log("🔍 URL PARAMS:", Array.from(params.entries()));
+    console.log("🔍 AUTO PARAM:", auto);
+    console.log("🔍 CODE PARAM:", code);
     
     // Detectar si debe ejecutar SIWE automáticamente
     const shouldRunSiwe = auto === "siwe" || (code && !sessionStorage.getItem("autoSiweDone"));
     
-    setDebug(`AutoSiwe: auto=${auto}, code=${!!code}, shouldRun=${shouldRunSiwe}`);
+    setDebug(`AutoSiwe: URL=${fullUrl.split('?')[1] || 'no-params'}, auto=${auto}, code=${!!code}, shouldRun=${shouldRunSiwe}`);
 
     if (!shouldRunSiwe) {
-      setDebug(`AutoSiwe: no hay trigger para SIWE (auto=${auto}, code=${!!code})`);
+      setDebug(`AutoSiwe: NO TRIGGER - auto=${auto}, code=${!!code}, sessionDone=${sessionStorage.getItem("autoSiweDone")}`);
       return;
     }
 
@@ -56,11 +65,9 @@ export default function AutoSiwe() {
           statement: "Inicia sesión con World App",
         });
 
-        // ======= LOGS PARA DEPURAR =======
         console.log("AutoSiwe - walletAuth response (raw):", res);
         setDebug("AutoSiwe: recibida respuesta, mirando estructura...");
 
-        // crea payload uniforme
         const payload = {
           siwe: {
             message: res?.siwe?.message ?? res?.message ?? null,
@@ -68,10 +75,9 @@ export default function AutoSiwe() {
           },
           username: res?.username ?? null,
           profilePictureUrl: res?.profilePictureUrl ?? null,
-          rawResponse: res ?? null // lo mando solo para debug, el servidor lo imprimirá
+          rawResponse: res ?? null
         };
 
-        // mostrar en consola cliente el payload final que vamos a enviar
         console.log("AutoSiwe - payload enviado a /api/complete-siwe:", payload);
         setDebug("AutoSiwe: enviando payload a backend...");
 
@@ -90,7 +96,6 @@ export default function AutoSiwe() {
         sessionStorage.setItem("autoSiweDone", "1");
         window.history.replaceState(null, "", window.location.pathname);
         
-        // Recargar la página para mostrar el estado autenticado
         window.location.reload();
         
       } catch (err: any) {
@@ -106,7 +111,20 @@ export default function AutoSiwe() {
   }, []);
 
   return (
-    <div style={{position:"fixed",bottom:10,left:10,background:"#000",color:"#fff",padding:"6px 10px",borderRadius:8,fontSize:12,opacity:.9,zIndex:9999}}>
+    <div style={{
+      position:"fixed",
+      bottom:10,
+      left:10,
+      background:"#000",
+      color:"#fff",
+      padding:"6px 10px",
+      borderRadius:8,
+      fontSize:12,
+      opacity:.9,
+      zIndex:9999,
+      maxWidth: "400px",
+      wordWrap: "break-word"
+    }}>
       {debug}
     </div>
   );
