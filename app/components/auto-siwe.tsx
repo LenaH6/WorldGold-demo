@@ -8,10 +8,15 @@ export default function AutoSiwe() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const auto = params.get("auto");
-    setDebug(`AutoSiwe: auto=${auto}`);
+    const code = params.get("code"); // OIDC callback code
+    
+    // Detectar si debe ejecutar SIWE automáticamente
+    const shouldRunSiwe = auto === "siwe" || (code && !sessionStorage.getItem("autoSiweDone"));
+    
+    setDebug(`AutoSiwe: auto=${auto}, code=${!!code}, shouldRun=${shouldRunSiwe}`);
 
-    if (auto !== "siwe") {
-      setDebug(`AutoSiwe: no hay ?auto=siwe (auto=${auto})`);
+    if (!shouldRunSiwe) {
+      setDebug(`AutoSiwe: no hay trigger para SIWE (auto=${auto}, code=${!!code})`);
       return;
     }
 
@@ -84,6 +89,10 @@ export default function AutoSiwe() {
         setDebug("AutoSiwe: SIWE OK ✅ limpiando query");
         sessionStorage.setItem("autoSiweDone", "1");
         window.history.replaceState(null, "", window.location.pathname);
+        
+        // Recargar la página para mostrar el estado autenticado
+        window.location.reload();
+        
       } catch (err: any) {
         console.error("AutoSiwe error:", err);
         setDebug("AutoSiwe: error ❌ " + (err?.message || "desconocido"));
