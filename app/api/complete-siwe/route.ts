@@ -257,6 +257,20 @@ export async function POST(req: NextRequest) {
       };
 
       console.log("✅ Fallback verification successful!");
+      cookies().set("rj_session", JSON.stringify({ 
+  sub: finalAddress, // usar wallet address como sub
+  name: body?.username || "World User", 
+  email: null,
+  walletAddress: finalAddress
+}), {
+  httpOnly: true,
+  sameSite: "lax",
+  path: "/",
+  secure: process.env.NODE_ENV === "production",
+  maxAge: 24 * 60 * 60 // 24 horas
+});
+
+console.log("✅ Session created for user:", finalAddress);
       console.log("Final user object:", user);
 
       // Limpiar cookie

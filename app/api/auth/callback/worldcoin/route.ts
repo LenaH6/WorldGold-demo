@@ -1,4 +1,4 @@
-// TEMPORAL: callback simple para probar redirect auto=siwe
+// app/api/auth/callback/worldcoin/route.ts
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -9,22 +9,19 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
 
-  // Si no hay code, manda error (igual que antes)
+  // Si no hay code, manda error
   if (!code) {
     return NextResponse.redirect(new URL("/?error=missing_code", originFrom(url)));
   }
 
-  // --- TEMPORAL: no intercambio de token, sólo dejamos una sesión mínima para testing ---
-  cookies().set("rj_session", JSON.stringify({ sub: "test-sub", name: "Test", email: null }), {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 // 1 h para test
-  });
+  // AQUÍ ES DONDE DEBERÍAS INTERCAMBIAR EL CODE POR TOKEN (OAuth flow)
+  // Pero para simplicidad, solo redirigimos a SIWE
+  
+  // NO crear sesión aquí - eso lo hace complete-siwe después de verificar SIWE
+  console.log("Worldcoin callback: code recibido, redirigiendo a auto=siwe");
 
-  // redirige con auto=siwe para que AutoSiwe se dispare
-  return NextResponse.redirect(new URL("/?auto=siwe", originFrom(url)));
+  // Redirige con auto=siwe Y preserva el code para que AutoSiwe lo detecte
+  return NextResponse.redirect(new URL(`/?auto=siwe&code=${encodeURIComponent(code)}`, originFrom(url)));
 }
 
 function originFrom(url: URL) {
