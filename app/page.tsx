@@ -1,86 +1,43 @@
-// app/page.tsx
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
-
+// app/page.tsx (Server Component)
 import "./globals.css";
-import LoginWithWorldID from "./components/LoginWithWorldID";
 import AutoSiwe from "./components/auto-siwe";
+import SiweLoginButton from "./components/siwe-login-button";
+// si tienes otros componentes cliente, impórtalos aquí (deben manejar sus propios eventos)
+
 import { cookies } from "next/headers";
 
-type Session = { 
-  sub: string; 
-  name?: string; 
-  email?: string; 
-  walletAddress?: string;
-};
+export const dynamic = "force-dynamic";
 
-function getSessionCookie() {
+function getSession() {
   const store = cookies();
   const raw = store.get("rj_session")?.value;
   if (!raw) return null;
-  try { 
-    return JSON.parse(raw) as Session;
-  } catch { 
-    return null; 
-  }
+  try { return JSON.parse(raw); } catch { return null; }
 }
 
-export default function Home() {
-  const session = getSessionCookie();
-  
+export default function Page() {
+  const session = getSession();
+
   return (
-    <main>
+    <main style={{ padding: 24, fontFamily: "system-ui, sans-serif" }}>
       <AutoSiwe />
-      
-      <div className="container">
+      <div style={{ maxWidth: 800, margin: "32px auto" }}>
+        <h1>WorldGold • MiniApp</h1>
+
         {session ? (
-          <div className="card">
-            <span className="badge">✅ Sesión activa</span>
-            <h2 style={{marginTop:10}}>
-              Hola{session.name ? `, ${session.name}` : ""} 👋
-            </h2>
-            <p style={{marginTop:8}}>
-              Autenticado con <strong>World ID + SIWE</strong>.
-            </p>
-            
-            <div style={{ 
-              background: '#f8fafc', 
-              padding: 16, 
-              borderRadius: 8, 
-              marginTop: 16,
-              fontSize: 14,
-              lineHeight: 1.6 
-            }}>
-              <div><strong>ID:</strong> {session.sub}</div>
-              {session.email && <div><strong>Email:</strong> {session.email}</div>}
-              {session.name && <div><strong>Nombre:</strong> {session.name}</div>}
-              {session.walletAddress && (
-                <div><strong>Wallet:</strong> {session.walletAddress}</div>
-              )}
-            </div>
-            
-            <hr/>
-            
-            <div style={{ display: 'flex', gap: 12 }}>
-              <a 
-                href="/api/clear-session" 
-                className="btn" 
-                style={{ background: '#ef4444', color: 'white' }}
-              >
-                Cerrar sesión
-              </a>
-              
-              <button 
-                onClick={() => window.location.reload()}
-                className="btn"
-                style={{ background: '#6b7280', color: 'white' }}
-              >
-                Recargar
-              </button>
-            </div>
+          <div style={{ padding: 16, borderRadius: 8, background: "#f5f5f5" }}>
+            <strong>Sesión activa</strong>
+            <p>Hola{session.name ? `, ${session.name}` : ""}</p>
+            <p>Sub: {session.sub}</p>
+            <a href="/api/auth/logout">Cerrar sesión</a>
           </div>
         ) : (
-          <LoginWithWorldID />
+          <div style={{ padding: 16 }}>
+            <p>Pulsa para iniciar sesión con World ID / World App.</p>
+            {/* SiweLoginButton es un Client Component y maneja su propio onClick.
+                Importante: NO le pases funciones desde este Server Component. */}
+            <SiweLoginButton />
+          </div>
         )}
       </div>
     </main>

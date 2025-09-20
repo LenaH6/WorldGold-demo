@@ -1,34 +1,58 @@
-'use client'
+"use client";
+import { useState } from "react";
+import { MiniKit } from "@worldcoin/minikit-js";
 
-export default function LoginWithWorldID() {
-  const clientId = process.env.NEXT_PUBLIC_WORLD_ID_CLIENT_ID!
-  const redirectUri = process.env.NEXT_PUBLIC_WORLD_ID_REDIRECT_URI!
+export default function SiweLoginButton() {
+  const [status, setStatus] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
 
-  const state = (typeof crypto !== 'undefined' && 'randomUUID' in crypto) ? crypto.randomUUID() : String(Date.now())
-  const nonce = (typeof crypto !== 'undefined' && 'randomUUID' in crypto) ? crypto.randomUUID() : String(Math.random())
+  async function signInWithWorldApp() {
+    try {
+      if (!MiniKit.isInstalled()) {
+        alert("Ábrelo desde la World App (no navegador).");
+        return;
+      }
 
-  const authorizeUrl = 'https://id.worldcoin.org/authorize?' + new URLSearchParams({
-    response_type: 'code',
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    scope: 'openid profile email',
-    state,
-    nonce,
-    prompt: 'consent'
-  }).toString()
+      const nonceRes = await fetch("/api/nonce");
+      const { nonce } = await nonceRes.json();
+
+      const res: any = await MiniKit.commandsAsync.walletAuth({
+        nonce,
+        statement: "Inicia sesión con World App",
+      });
+
+      const payload = {
+        siwe: {
+          message: res?.siwe?.message ?? res?.message,
+          signature: res?.siwe?.signature ?? res?.signature,
+        },
+        username: res?.username ?? null,
+        profilePictureUrl: res?.profilePictureUrl ?? null,
+      };
+
+      const verifyRes = await fetch("/api/complete-siwe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!verifyRes.ok) throw new Error(await verifyRes.text());
+      const data = await verifyRes.json();
+      setUser(data.user);
+      setStatus("✅ Sesión creada");
+    } catch (e: any) {
+      console.error(e);
+      setStatus("❌ " + (e?.message || "Error"));
+    }
+  }
 
   return (
-    <div className="card" style={{textAlign:'center'}}>
-      <h1 style={{fontSize: 28, margin: 0, fontWeight: 900}}>RainbowJump</h1>
-      <p style={{marginTop: 8, fontSize: 14}}>Demo: botón único de <b>Login con World ID</b> (OIDC)</p>
-      <a href={authorizeUrl} style={{textDecoration: 'none'}}>
-        <button className="btn btn-primary" style={{marginTop: 18}}>
-          <span>Entrar con World ID</span>
-        </button>
-      </a>
-      <p className="note" style={{marginTop: 12}}>
-        Al tocar, verás la UI típica de World ID; tras aceptar, volverás aquí autenticado.
-      </p>
+    <div style={{ marginTop: 12 }}>
+      <button onClick={signInWithWorldApp} style={{ padding: "12px 16px", borderRadius: 12 }}>
+        Entrar con World App (SIWE)
+      </button>
+      {status && <p style={{ marginTop: 8 }}>{status}</p>}
+      {user && <pre style={{ marginTop: 8 }}>{JSON.stringify(user, null, 2)}</pre>}
     </div>
-  )
+  );
 }
