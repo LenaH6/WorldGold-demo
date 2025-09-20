@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-
 import { MiniKit } from "@worldcoin/minikit-js";
 import { useMiniKit } from "./minikit-provider";
 
@@ -9,7 +8,6 @@ export default function AutoSiwe() {
   const { isReady, isInstalled } = useMiniKit();
 
   useEffect(() => {
-    // No hacer nada hasta que MiniKit esté listo
     if (!isReady) {
       setDebug("AutoSiwe: esperando MiniKit...");
       return;
@@ -19,11 +17,8 @@ export default function AutoSiwe() {
     const auto = params.get("auto");
     const code = params.get("code");
     
-    const currentUrl = window.location.href;
-    const lastProcessedUrl = sessionStorage.getItem("lastSiweUrl");
-    
-    console.log("🔍 AutoSiwe Debug:");
-    console.log("- URL:", currentUrl);
+    console.log("🔍 AutoSiwe Nueva Sesión:");
+    console.log("- URL:", window.location.href);
     console.log("- Params:", Array.from(params.entries()));
     console.log("- MiniKit Ready:", isReady, "Installed:", isInstalled);
     
@@ -36,16 +31,21 @@ export default function AutoSiwe() {
       return;
     }
 
-    if (lastProcessedUrl === currentUrl) {
-      setDebug("AutoSiwe: misma URL ya procesada");
-      window.history.replaceState(null, "", window.location.pathname);
-      return;
+    // ✅ CAMBIO CLAVE: Solo evitar loops INMEDIATOS (no bloquear sesiones futuras)
+    const executionKey = `siwe_executing_${Date.now()}`;
+    if (sessionStorage.getItem("siwe_executing")) {
+      const lastExecution = parseInt(sessionStorage.getItem("siwe_executing") || "0");
+      const timeSince = Date.now() - lastExecution;
+      
+      // Solo bloquear si fue hace menos de 10 segundos (evita loops, permite re-auth)
+      if (timeSince < 10000) {
+        setDebug("AutoSiwe: ejecutándose recientemente, esperando...");
+        return;
+      }
     }
 
     if (!isInstalled) {
       setDebug("❌ AutoSiwe: MiniKit no disponible - ¿estás en World App?");
-      console.error("❌ MiniKit not installed. Cannot proceed with SIWE.");
-      // Limpiar URL pero no continuar
       window.history.replaceState(null, "", window.location.pathname);
       return;
     }
@@ -54,14 +54,16 @@ export default function AutoSiwe() {
 
     (async () => {
       try {
+        // Marcar que está ejecutándose (temporal)
+        sessionStorage.setItem("siwe_executing", Date.now().toString());
+        
         setDebug("AutoSiwe: pidiendo nonce…");
         const nonceRes = await fetch("/api/nonce");
         if (!nonceRes.ok) throw new Error("nonce fetch failed");
         const { nonce } = await nonceRes.json();
-        console.log("✅ Nonce:", nonce);
 
-        setDebug("🚀 AutoSiwe: Ejecutando walletAuth (pantalla SIWE debería aparecer)...");
-        console.log("🚀 Calling MiniKit.commandsAsync.walletAuth...");
+        setDebug("🚀 AutoSiwe: Ejecutando walletAuth (pantalla SIWE)...");
+        console.log("🚀 Executing walletAuth - SIWE screen should appear");
         
         const res: any = await MiniKit.commandsAsync.walletAuth({
           nonce,
@@ -69,7 +71,7 @@ export default function AutoSiwe() {
         });
 
         console.log("✅ walletAuth response:", res);
-        setDebug("✅ AutoSiwe: Respuesta recibida, procesando...");
+        setDebug("✅ AutoSiwe: Usuario completó SIWE, verificando...");
 
         const payload = {
           siwe: {
@@ -81,8 +83,8 @@ export default function AutoSiwe() {
           rawResponse: res ?? null
         };
 
-        console.log("📤 Payload to backend:", payload);
-        setDebug("📤 AutoSiwe: enviando a complete-siwe...");
+        console.log("📤 Enviando payload:", payload);
+        setDebug("📤 AutoSiwe: enviando a backend para verificar firma...");
 
         const vr = await fetch("/api/complete-siwe", {
           method: "POST",
@@ -92,26 +94,33 @@ export default function AutoSiwe() {
 
         if (!vr.ok) {
           const text = await vr.text();
-          console.error("❌ complete-siwe failed:", text);
           throw new Error("complete-siwe failed: " + text);
         }
 
         const result = await vr.json();
-        console.log("✅ Backend success:", result);
+        console.log("✅ Verificación exitosa:", result);
 
-        setDebug("✅ AutoSiwe: ¡Autenticación exitosa!");
-        sessionStorage.setItem("lastSiweUrl", currentUrl);
+        setDebug("✅ AutoSiwe: Verificación exitosa - creando sesión...");
+        
+        // ✅ CAMBIO: Limpiar flag de ejecución al completar exitosamente
+        sessionStorage.removeItem("siwe_executing");
+        
+        // Limpiar URL
         window.history.replaceState(null, "", window.location.pathname);
         
-        // Esperar un poco para que el usuario vea el mensaje de éxito
+        // Reload para mostrar usuario autenticado
         setTimeout(() => {
           window.location.reload();
         }, 1000);
         
       } catch (err: any) {
         console.error("❌ AutoSiwe error:", err);
-        setDebug("❌ Error: " + (err?.message || "desconocido"));
-        // Limpiar URL en caso de error
+        setDebug("❌ Error en verificación: " + (err?.message || "desconocido"));
+        
+        // Limpiar flag de ejecución en caso de error
+        sessionStorage.removeItem("siwe_executing");
+        
+        // Limpiar URL después de mostrar error
         setTimeout(() => {
           window.history.replaceState(null, "", window.location.pathname);
         }, 3000);
@@ -121,7 +130,7 @@ export default function AutoSiwe() {
     return () => {
       cancelled = true;
     };
-  }, [isReady, isInstalled]); // Dependencias importantes
+  }, [isReady, isInstalled]);
 
   return (
     <div style={{

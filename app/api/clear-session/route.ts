@@ -30,7 +30,8 @@ export async function GET() {
       } catch(e) {
         console.log('Error clearing storage:', e);
       }
-      
+      sessionStorage.removeItem('siwe_executing'); // Nueva línea
+sessionStorage.clear();
       // Limpiar cookies del cliente
       document.cookie.split(";").forEach(function(c) {
         document.cookie = c.replace(/=.*/, "=;expires=" + new Date(0).toUTCString() + ";path=/");
