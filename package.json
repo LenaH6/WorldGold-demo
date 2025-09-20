@@ -9,21 +9,21 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@types/node": "^20.16.0",
     "@worldcoin/minikit-js": "^1.9.6",
     "cookie": "0.6.0",
     "ethers": "^6.9.0",
     "next": "14.2.32",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "siwe": "^3.0.0"
+    "siwe": "^3.0.0",
+    "typescript": "^5.4.5"
   },
   "devDependencies": {
     "@types/cookie": "^0.6.0",
-    "@types/node": "^20.16.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "eslint": "^8.57.0",
-    "eslint-config-next": "^14.2.32",
-    "typescript": "^5.4.5"
+    "eslint-config-next": "^14.2.32"
   }
 }
